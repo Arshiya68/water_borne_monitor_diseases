@@ -123,3 +123,47 @@ To test and verify the EWS warning triggers, execute these Python scripts from t
 Text-only documentation files are available in your workspace root directory for evaluator briefings:
 * [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md) (Markdown)
 * [EWS_Project_Evaluator_Report.pdf](./EWS_Project_Evaluator_Report.pdf) (PDF briefing report)
+
+---
+
+## 🐳 Docker Deployment & Containerization
+
+The project is fully containerized, packaging the React frontend (served by Nginx) and Flask backend (served by Gunicorn) into a single, unified container running on port `80`.
+
+### 1. Run Locally using Docker
+
+If you have Docker Desktop installed, follow these steps to build and run the project locally.
+
+#### A. Build the Unified Image
+From the project root directory, run:
+```bash
+docker build -t <your-docker-username>/water_borne_monitor_diseases:latest .
+```
+
+#### B. Run the Container
+Run the built container, mapping port `80` to your host:
+```bash
+docker run -d -p 80:80 --name waterborne-monitor <your-docker-username>/water_borne_monitor_diseases:latest
+```
+Access the application by opening `http://localhost` in your web browser.
+
+#### C. Push Manually to Docker Hub
+Log in to your Docker Hub account and push the tagged image:
+```bash
+docker login
+docker push <your-docker-username>/water_borne_monitor_diseases:latest
+```
+
+---
+
+### 2. Automated Cloud Push via GitHub Actions
+
+A CI/CD pipeline is pre-configured in [.github/workflows/docker-build-push.yml](.github/workflows/docker-build-push.yml). Whenever you push new code to the `main` branch, GitHub will automatically build and push the Docker image to your Docker Hub.
+
+To enable this:
+1. Go to your repository on GitHub.
+2. Navigate to **Settings** > **Secrets and variables** > **Actions**.
+3. Create the following two **Repository Secrets**:
+   - `DOCKER_USERNAME`: Your Docker Hub username.
+   - `DOCKER_PASSWORD`: Your Docker Hub password (or Personal Access Token).
+4. Run `git push` to upload your code to GitHub, and the image build/push will be triggered automatically.
