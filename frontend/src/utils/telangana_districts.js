@@ -1,0 +1,47 @@
+export const TELANGANA_DISTRICTS = [
+    "Hyderabad",
+    "Ranga Reddy",
+    "Medchal-Malkajgiri",
+    "Nalgonda",
+    "Warangal Urban",
+    "Warangal Rural",
+    "Vikarabad",
+    "Karimnagar",
+    "Rajahmundry",
+    "Kakinada",
+    "Nizamabad",
+    "Kamareddy",
+    "Adilabad",
+    "Nirmal",
+    "Khammam",
+    "Mahbubnagar",
+    "Nagarkurnool",
+    "Wanaparthy",
+];
+
+export const DISTRICT_COORDINATES = {
+    "Hyderabad": [17.3850, 78.4867],
+    "Ranga Reddy": [17.4060, 78.4772],
+    "Medchal-Malkajgiri": [17.3705, 78.5919],
+    "Nalgonda": [17.5738, 79.1335],
+    "Warangal Urban": [17.9689, 79.5941],
+    "Warangal Rural": [18.0067, 79.5882],
+    "Vikarabad": [18.3183, 78.1380],
+    "Karimnagar": [18.4386, 78.8478],
+    "Rajahmundry": [17.0753, 81.7740],
+    "Kakinada": [16.9891, 82.2475],
+    "Nizamabad": [18.6725, 78.1358],
+    "Kamareddy": [18.4569, 78.3422],
+    "Adilabad": [19.6648, 78.5239],
+    "Nirmal": [19.1427, 78.3789],
+    "Khammam": [17.2673, 80.6193],
+    "Mahbubnagar": [16.7394, 78.6716],
+    "Nagarkurnool": [16.1761, 78.3383],
+    "Wanaparthy": [16.5122, 77.9378],
+};
+
+export const RISK_COLORS = {
+    'High': '#EF4444',
+    'Medium': '#F59E0B',
+    'Low': '#10B981',
+};

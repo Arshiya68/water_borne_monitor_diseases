@@ -1,0 +1,40 @@
+# Dependency directories
+node_modules/
+venv/
+ENV/
+env/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Local database and instance configurations
+instance/
+*.db
+*.sqlite
+
+# Environment variables
+.env
+.env.local
+
+# IDE and Editor settings
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Project Data Exclusions (large datasets)
+data/combined/
+data/processed/
+data/raw/
+*.csv
