@@ -83,11 +83,18 @@ export default function ReportSymptomsPage() {
     longitude: null,
   })
   const [formData, setFormData] = useState({
+    name: user?.name || '',
+    age: user?.age || '',
     diarrhea: 0,
     vomiting: 0,
     fever: 0,
     abdominal_pain: 0,
     dehydration: 0,
+    nausea: 0,
+    blood_in_stool: 0,
+    skin_infection: 0,
+    other: 0,
+    other_symptoms: '',
     diarrhea_severity: 1,
     fever_severity: 1,
     water_source: 0,
@@ -184,12 +191,19 @@ export default function ReportSymptomsPage() {
         state: locationData.state,
         latitude: locationData.latitude,
         longitude: locationData.longitude,
+        // Villager details
+        name: formData.name,
+        age: formData.age,
         // Symptoms
         diarrhea: formData.diarrhea,
         vomiting: formData.vomiting,
         fever: formData.fever,
         abdominal_pain: formData.abdominal_pain,
         dehydration: formData.dehydration,
+        nausea: formData.nausea,
+        blood_in_stool: formData.blood_in_stool,
+        skin_infection: formData.skin_infection,
+        other_symptoms: formData.other ? formData.other_symptoms : '',
         diarrhea_severity: formData.diarrhea_severity,
         fever_severity: formData.fever_severity,
         water_source: formData.water_source,
@@ -236,6 +250,34 @@ export default function ReportSymptomsPage() {
 
         <div className="grid gap-8 lg:grid-cols-[1.4fr_0.6fr]">
           <form onSubmit={handleSubmit} className="space-y-6 bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
+
+            {/* Villager Name & Age */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="space-y-1">
+                <span className="text-xs font-semibold text-slate-700">Villager Name *</span>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Enter full name"
+                  className="input-field w-full text-sm font-medium"
+                  required
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-semibold text-slate-700">Villager Age *</span>
+                <input
+                  type="number"
+                  name="age"
+                  value={formData.age}
+                  onChange={(e) => setFormData(prev => ({ ...prev, age: e.target.value }))}
+                  placeholder="Enter age"
+                  className="input-field w-full text-sm font-medium"
+                  required
+                />
+              </label>
+            </div>
 
             {/* GIS Location Picker */}
             <div className="border border-emerald-200 rounded-2xl bg-emerald-50 p-5">
@@ -326,11 +368,15 @@ export default function ReportSymptomsPage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               {[
+                { name: 'fever', label: 'Fever' },
                 { name: 'diarrhea', label: 'Diarrhea' },
                 { name: 'vomiting', label: 'Vomiting' },
-                { name: 'fever', label: 'Fever' },
-                { name: 'abdominal_pain', label: 'Abdominal Pain' },
+                { name: 'nausea', label: 'Nausea' },
+                { name: 'abdominal_pain', label: 'Stomach Pain' },
                 { name: 'dehydration', label: 'Dehydration' },
+                { name: 'blood_in_stool', label: 'Blood in Stool' },
+                { name: 'skin_infection', label: 'Skin Infection' },
+                { name: 'other', label: 'Other Symptom' },
               ].map((symptom) => (
                 <div
                   key={symptom.name}
@@ -365,6 +411,20 @@ export default function ReportSymptomsPage() {
                 </div>
               ))}
             </div>
+
+            {formData.other === 1 && (
+              <label className="space-y-1 block">
+                <span className="text-xs font-semibold text-slate-700">Describe Other Symptoms</span>
+                <input
+                  type="text"
+                  name="other_symptoms"
+                  value={formData.other_symptoms}
+                  onChange={(e) => setFormData(prev => ({ ...prev, other_symptoms: e.target.value }))}
+                  placeholder="Enter symptoms description"
+                  className="input-field w-full text-sm font-medium"
+                />
+              </label>
+            )}
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-2">

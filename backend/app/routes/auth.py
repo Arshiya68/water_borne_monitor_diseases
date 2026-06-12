@@ -160,6 +160,8 @@ def login():
                 'email': user.email,
                 'phone': user.phone,
                 'role': user.role,
+                'district': user.district,
+                'village': user.village,
             }
         }), 200
         

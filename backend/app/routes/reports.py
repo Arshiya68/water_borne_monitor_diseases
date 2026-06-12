@@ -87,11 +87,24 @@ def submit_report():
 
         prediction = predict_risk(prediction_input)
 
+        # 1. Resolve location
+        village_loc = data.get('village') or user.village
+        district_loc = data.get('district') or user.district
+
+        # 2. Auto-assign to nearest ASHA Worker
+        assigned_asha_id = None
+        assigned_asha = User.query.filter_by(role='asha_worker', village=village_loc).first()
+        if not assigned_asha:
+            assigned_asha = User.query.filter_by(role='asha_worker', district=district_loc).first()
+        if assigned_asha:
+            assigned_asha_id = assigned_asha.id
+
         report = SymptomReport(
             user_id=user_id,
-            # Use location from request data (GIS map) if provided, else from user profile
-            village=data.get('village') or user.village,
-            district=data.get('district') or user.district,
+            villager_name=data.get('name') or user.name,
+            villager_age=data.get('age') or user.age,
+            village=village_loc,
+            district=district_loc,
             state=data.get('state') or user.state,
             latitude=data.get('latitude') or user.latitude,
             longitude=data.get('longitude') or user.longitude,
@@ -100,6 +113,10 @@ def submit_report():
             fever=data.get('fever', 0),
             abdominal_pain=data.get('abdominal_pain', 0),
             dehydration=data.get('dehydration', 0),
+            nausea=data.get('nausea', 0),
+            blood_in_stool=data.get('blood_in_stool', 0),
+            skin_infection=data.get('skin_infection', 0),
+            other_symptoms=data.get('other_symptoms'),
             diarrhea_severity=data.get('diarrhea_severity', 1),
             fever_severity=data.get('fever_severity', 1),
             water_source=data.get('water_source', 0),
@@ -108,6 +125,8 @@ def submit_report():
             predicted_risk=prediction.get('risk_level', 'Low'),
             risk_confidence=prediction.get('probability', 0.0),
             water_quality_score=round(prediction.get('water_quality_score', prediction.get('probability', 0.0) * 100), 2),
+            status='Pending',
+            assigned_asha_worker_id=assigned_asha_id,
         )
 
         db.session.add(report)
@@ -370,6 +389,7 @@ def verify_report(report_id):
 
         data = request.get_json() or {}
         report.verified = True
+        report.status = 'Verified'
         report.verified_by_id = user_id
         report.diagnosis = data.get('diagnosis', report.diagnosis)
         report.referral_status = data.get('referral_status', report.referral_status)
@@ -386,3 +406,87 @@ def verify_report(report_id):
         db.session.rollback()
         print(f"Verify report error: {str(e)}")
         return jsonify({'error': 'Failed to verify report'}), 500
+
+
+@reports_bp.route('/reject/<int:report_id>', methods=['PATCH'])
+@jwt_required()
+def reject_report(report_id):
+    """Reject/Mark False report (ASHA worker, official, admin)"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+
+        if not user or user.role not in ['asha_worker', 'official', 'admin']:
+            return jsonify({'error': 'Not authorized'}), 403
+
+        report = SymptomReport.query.get(report_id)
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+
+        report.verified = False
+        report.status = 'Rejected'
+        report.verified_by_id = user_id
+        report.verified_at = datetime.utcnow()
+
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Report marked as false/rejected',
+            'report': serialize_report(report),
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Reject report error: {str(e)}")
+        return jsonify({'error': 'Failed to reject report'}), 500
+
+
+@reports_bp.route('/escalate/<int:report_id>', methods=['PATCH'])
+@jwt_required()
+def escalate_report(report_id):
+    """Escalate report to Higher Officials (ASHA worker action)"""
+    try:
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+
+        if not user or user.role not in ['asha_worker', 'official', 'admin']:
+            return jsonify({'error': 'Not authorized'}), 403
+
+        report = SymptomReport.query.get(report_id)
+        if not report:
+            return jsonify({'error': 'Report not found'}), 404
+
+        data = request.get_json() or {}
+        report.verified = True
+        report.status = 'Verified'  # Escalate counts as verifying on the ground and signaling high priority
+        report.verified_by_id = user_id
+        report.diagnosis = data.get('diagnosis') or "Escalated Suspected Outbreak"
+        report.referral_status = True  # Auto-refer
+        report.verified_at = datetime.utcnow()
+
+        # Generate a notification alert for this escalation
+        alert_message = (
+            f"🚨 ESCALATED OUTBREAK THREAT: ASHA Worker {user.name} has escalated a suspected case in "
+            f"{report.village} ({report.district}). Symptoms observed: "
+            f"Fever/Diarrhea. Immediate review required by officials."
+        )
+        escalation_alert = Notification(
+            sender_id=user_id,
+            village=report.village,
+            district=report.district,
+            risk_level='High',
+            message=alert_message,
+            created_at=datetime.utcnow()
+        )
+        db.session.add(escalation_alert)
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Report verified and escalated successfully',
+            'report': serialize_report(report),
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Escalate report error: {str(e)}")
+        return jsonify({'error': 'Failed to escalate report'}), 500

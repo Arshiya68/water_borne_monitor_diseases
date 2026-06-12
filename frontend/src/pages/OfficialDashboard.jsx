@@ -11,7 +11,14 @@ import {
   Send, 
   ShieldAlert, 
   Droplet,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  CheckSquare,
+  Home,
+  ClipboardList,
+  Check,
+  X,
+  Search
 } from 'lucide-react'
 import OutbreakMap from '../components/official/OutbreakMap'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
@@ -52,9 +59,26 @@ export default function OfficialDashboard() {
   const [broadcasting, setBroadcasting] = useState(false)
   const [activeAlerts, setActiveAlerts] = useState([])
 
+  // Official Monitoring States
+  const [reports, setReports] = useState([])
+  const [householdVisits, setHouseholdVisits] = useState([])
+  const [alertInvestigations, setAlertInvestigations] = useState([])
+  const [reportsFilter, setReportsFilter] = useState('All')
+  const [riskFilter, setRiskFilter] = useState('All')
+  const [searchTerm, setSearchTerm] = useState('')
+  
+  // Verification dialog/modal state
+  const [selectedReport, setSelectedReport] = useState(null)
+  const [diagnosis, setDiagnosis] = useState('')
+  const [referralStatus, setReferralStatus] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+
   useEffect(() => {
     fetchStats()
     fetchActiveAlerts()
+    fetchReports()
+    fetchHouseholdVisits()
+    fetchAlertInvestigations()
   }, [])
 
   useEffect(() => {
@@ -97,6 +121,81 @@ export default function OfficialDashboard() {
     } finally {
       setMlLoading(false)
     }
+  }
+
+  const fetchReports = async () => {
+    try {
+      const response = await api.get('/reports/list')
+      setReports(response.data)
+    } catch (error) {
+      console.error('Error fetching reports:', error)
+    }
+  }
+
+  const fetchHouseholdVisits = async () => {
+    try {
+      const response = await api.get('/household-visits')
+      setHouseholdVisits(response.data)
+    } catch (error) {
+      console.error('Error fetching household visits:', error)
+    }
+  }
+
+  const fetchAlertInvestigations = async () => {
+    try {
+      const response = await api.get('/alert-investigations')
+      setAlertInvestigations(response.data)
+    } catch (error) {
+      console.error('Error fetching alert investigations:', error)
+    }
+  }
+
+  const handleVerifyReport = async (e) => {
+    e.preventDefault()
+    if (!selectedReport) return
+    setVerifying(true)
+    try {
+      await api.patch(`/reports/verify/${selectedReport.id}`, {
+        diagnosis,
+        referral_status: referralStatus
+      })
+      toast.success('Report verified successfully!')
+      setSelectedReport(null)
+      setDiagnosis('')
+      setReferralStatus(false)
+      fetchReports()
+      fetchStats()
+    } catch (error) {
+      toast.error('Failed to verify report')
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  const handleRejectReport = async (reportId) => {
+    if (!window.confirm('Are you sure you want to mark this report as false/rejected?')) return
+    try {
+      await api.patch(`/reports/reject/${reportId}`)
+      toast.success('Report marked as false/rejected')
+      fetchReports()
+      fetchStats()
+    } catch (error) {
+      toast.error('Failed to reject report')
+    }
+  }
+
+  const getSymptomString = (report) => {
+    const list = []
+    if (report.symptoms?.diarrhea) list.push('Diarrhea')
+    if (report.symptoms?.vomiting) list.push('Vomiting')
+    if (report.symptoms?.fever) list.push('Fever')
+    if (report.symptoms?.abdominal_pain) list.push('Abdominal Pain')
+    if (report.symptoms?.dehydration) list.push('Dehydration')
+    if (report.symptoms?.nausea) list.push('Nausea')
+    if (report.symptoms?.blood_in_stool) list.push('Blood in Stool')
+    if (report.symptoms?.skin_infection) list.push('Skin Infection')
+    if (report.symptoms?.other_symptoms) list.push(report.symptoms.other_symptoms)
+    return list.join(', ') || 'None'
   }
 
   const handleBroadcastAlert = async (e) => {
@@ -154,6 +253,10 @@ export default function OfficialDashboard() {
               { id: 'overview', label: 'EWS Overview', icon: Activity },
               { id: 'map', label: 'Outbreak Hotspot Map', icon: Map },
               { id: 'analysis', label: 'ML Risk Analysis', icon: BarChart3 },
+              { id: 'reports', label: 'Villager Reports', icon: FileText },
+              { id: 'asha_verifications', label: 'ASHA Verifications', icon: CheckSquare },
+              { id: 'household_tracking', label: 'Household Visits', icon: Home },
+              { id: 'investigation_status', label: 'Alert Investigations', icon: ClipboardList },
               { id: 'alerts', label: 'Emergency Broadcast', icon: Bell },
               { id: 'simulator', label: 'Outbreak Simulator', icon: Sliders },
             ].map((tab) => {
@@ -447,6 +550,429 @@ export default function OfficialDashboard() {
               </div>
             )}
 
+            {/* VILLAGER REPORTS TAB */}
+            {activeTab === 'reports' && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-emerald-600" />
+                      <span>All Villager Symptom Reports ({reports.length})</span>
+                    </h2>
+                    <p className="text-slate-500 text-xs mt-1">Audit and verify gastrointestinal symptom submissions reported by citizens.</p>
+                  </div>
+                  
+                  {/* Filters */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        placeholder="Search village/district..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 font-medium text-xs focus:ring-2 focus:ring-emerald-500 outline-none w-48 shadow-sm transition"
+                      />
+                    </div>
+                    
+                    <select
+                      value={reportsFilter}
+                      onChange={e => setReportsFilter(e.target.value)}
+                      className="px-3 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 font-bold text-xs focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm transition"
+                    >
+                      <option value="All">All Statuses</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Verified">Verified</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
+
+                    <select
+                      value={riskFilter}
+                      onChange={e => setRiskFilter(e.target.value)}
+                      className="px-3 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 font-bold text-xs focus:ring-2 focus:ring-emerald-500 outline-none shadow-sm transition"
+                    >
+                      <option value="All">All Risk Levels</option>
+                      <option value="High">High Risk</option>
+                      <option value="Medium">Medium Risk</option>
+                      <option value="Low">Low Risk</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold text-[10px] uppercase tracking-wider">
+                          <th className="py-4 px-6">ID</th>
+                          <th className="py-4 px-6">Villager</th>
+                          <th className="py-4 px-6">Location</th>
+                          <th className="py-4 px-6">Symptoms</th>
+                          <th className="py-4 px-6">Risk Level</th>
+                          <th className="py-4 px-6">Status</th>
+                          <th className="py-4 px-6">Date</th>
+                          <th className="py-4 px-6 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {reports
+                          .filter(r => {
+                            const matchSearch = (r.village || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                                (r.district || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                                (r.villager_name || '').toLowerCase().includes(searchTerm.toLowerCase());
+                            const matchStatus = reportsFilter === 'All' ? true : r.status === reportsFilter;
+                            const matchRisk = riskFilter === 'All' ? true : r.predicted_risk === riskFilter;
+                            return matchSearch && matchStatus && matchRisk;
+                          })
+                          .map(report => (
+                            <tr key={report.id} className="hover:bg-slate-50 transition">
+                              <td className="py-4 px-6 font-mono font-bold text-slate-400">#{report.id}</td>
+                              <td className="py-4 px-6">
+                                <p className="font-bold text-slate-900">{report.villager_name || 'Anonymous'}</p>
+                                <p className="text-[10px] text-slate-500">{report.villager_age ? `${report.villager_age} yrs` : 'Age N/A'}</p>
+                              </td>
+                              <td className="py-4 px-6 font-medium text-slate-700">
+                                {report.village}, <span className="text-[10px] text-slate-450">{report.district}</span>
+                              </td>
+                              <td className="py-4 px-6 max-w-[200px] truncate" title={getSymptomString(report)}>
+                                {getSymptomString(report)}
+                              </td>
+                              <td className="py-4 px-6">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                  report.predicted_risk === 'High' ? 'bg-red-50 text-red-700 border border-red-150' :
+                                  report.predicted_risk === 'Medium' ? 'bg-amber-50 text-amber-700 border border-amber-150' :
+                                  'bg-emerald-50 text-emerald-700 border border-emerald-150'
+                                }`}>
+                                  {report.predicted_risk}
+                                </span>
+                              </td>
+                              <td className="py-4 px-6">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                  report.status === 'Verified' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' :
+                                  report.status === 'Rejected' ? 'bg-rose-50 text-rose-700 border border-rose-150' :
+                                  'bg-amber-50 text-amber-700 border border-amber-150 animate-pulse'
+                                }`}>
+                                  {report.status}
+                                </span>
+                              </td>
+                              <td className="py-4 px-6 text-slate-500">
+                                {new Date(report.submitted_at).toLocaleDateString()}
+                              </td>
+                              <td className="py-4 px-6 text-center">
+                                {report.status === 'Pending' ? (
+                                  <div className="flex justify-center gap-1.5">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedReport(report);
+                                        setDiagnosis('');
+                                        setReferralStatus(false);
+                                      }}
+                                      className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition"
+                                      title="Verify Report"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleRejectReport(report.id)}
+                                      className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition"
+                                      title="Mark False/Reject"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 font-medium italic">Handled</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        {reports.length === 0 && (
+                          <tr>
+                            <td colSpan="8" className="py-8 text-center text-slate-400">No reports logged in database.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ASHA VERIFICATION REPORTS TAB */}
+            {activeTab === 'asha_verifications' && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <CheckSquare className="w-5 h-5 text-emerald-600" />
+                    <span>ASHA Worker Verification Audit Logs</span>
+                  </h2>
+                  <p className="text-slate-500 text-xs mt-1">Review clinical verification status, diagnoses, and referrals logged by ASHA workers during field investigations.</p>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold text-[10px] uppercase tracking-wider">
+                          <th className="py-4 px-6">Report ID</th>
+                          <th className="py-4 px-6">Villager</th>
+                          <th className="py-4 px-6">Location</th>
+                          <th className="py-4 px-6">Verified By</th>
+                          <th className="py-4 px-6">Ground Diagnosis</th>
+                          <th className="py-4 px-6">Referral Status</th>
+                          <th className="py-4 px-6">Verification Date</th>
+                          <th className="py-4 px-6">Risk</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {reports
+                          .filter(r => r.status === 'Verified')
+                          .map(report => (
+                            <tr key={report.id} className="hover:bg-slate-50 transition">
+                              <td className="py-4 px-6 font-mono font-bold text-slate-400">#{report.id}</td>
+                              <td className="py-4 px-6 font-bold text-slate-900">
+                                {report.villager_name || 'Anonymous'} ({report.villager_age || 'N/A'} yrs)
+                              </td>
+                              <td className="py-4 px-6 font-medium text-slate-700">
+                                {report.village}, {report.district}
+                              </td>
+                              <td className="py-4 px-6 text-emerald-700 font-semibold">
+                                👩‍⚕️ {report.verified_by?.name || 'ASHA Worker'}
+                              </td>
+                              <td className="py-4 px-6 font-mono text-slate-800 italic">
+                                {report.diagnosis || 'No diagnosis logged'}
+                              </td>
+                              <td className="py-4 px-6">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                  report.referral_status ? 'bg-red-50 text-red-700 border border-red-150' : 'bg-emerald-50 text-emerald-700 border border-emerald-150'
+                                }`}>
+                                  {report.referral_status ? '🚨 Referred to PHC' : '🟢 Home Care'}
+                                </span>
+                              </td>
+                              <td className="py-4 px-6 text-slate-500">
+                                {report.verified_at ? new Date(report.verified_at).toLocaleDateString() : 'N/A'}
+                              </td>
+                              <td className="py-4 px-6">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                  report.predicted_risk === 'High' ? 'bg-red-50 text-red-700' : 'bg-slate-50 text-slate-700'
+                                }`}>
+                                  {report.predicted_risk}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        {reports.filter(r => r.status === 'Verified').length === 0 && (
+                          <tr>
+                            <td colSpan="8" className="py-8 text-center text-slate-400">No verified reports found.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* HOUSEHOLD VISIT TRACKING TAB */}
+            {activeTab === 'household_tracking' && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* Stats Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total House Visits</p>
+                    <p className="text-3xl font-extrabold text-blue-600 mt-2">{householdVisits.length}</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Field visits tracked by ASHA</p>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Suspected Cases</p>
+                    <p className="text-3xl font-extrabold text-amber-600 mt-2">
+                      {householdVisits.filter(v => v.status === 'Suspected Case').length}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-1">Gastrointestinal anomalies flagged</p>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Confirmed Cases</p>
+                    <p className="text-3xl font-extrabold text-rose-600 mt-2">
+                      {householdVisits.filter(v => ['Confirmed Case', 'Confirm'].includes(v.status)).length}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-1">Confirmed clinical outbreaks</p>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Sick Members Tracked</p>
+                    <p className="text-3xl font-extrabold text-slate-700 mt-2">
+                      {householdVisits.reduce((acc, curr) => acc + (curr.sick_members_count || 0), 0)}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-1">Cumulative sick individuals logged</p>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2 mb-2">
+                    <Home className="w-5 h-5 text-emerald-600" />
+                    <span>Village Health Register: ASHA Direct Entry logs</span>
+                  </h2>
+                  <p className="text-slate-500 text-xs mb-6">Review raw survey parameters entered directly by health workers during scheduled surveillance runs.</p>
+
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold text-[10px] uppercase tracking-wider">
+                            <th className="py-4 px-6">ASHA Worker</th>
+                            <th className="py-4 px-6">Household</th>
+                            <th className="py-4 px-6">Village</th>
+                            <th className="py-4 px-6">Water Source</th>
+                            <th className="py-4 px-6 text-center">Sick Members</th>
+                            <th className="py-4 px-6">Symptoms Observed</th>
+                            <th className="py-4 px-6">Health Status</th>
+                            <th className="py-4 px-6">Visit Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs">
+                          {householdVisits.map(visit => (
+                            <tr key={visit.id} className="hover:bg-slate-50 transition">
+                              <td className="py-4 px-6 font-bold text-slate-900">👩‍⚕️ {visit.asha_worker_name}</td>
+                              <td className="py-4 px-6">
+                                <p className="font-semibold text-slate-800">{visit.household_name}</p>
+                                <p className="text-[10px] text-slate-450">{visit.family_members || 1} family members</p>
+                              </td>
+                              <td className="py-4 px-6 font-medium text-slate-700">{visit.village}</td>
+                              <td className="py-4 px-6 text-slate-655 font-mono text-[11px]">{visit.water_source || 'Unknown'}</td>
+                              <td className="py-4 px-6 text-center font-bold text-slate-900">
+                                <span className={`px-2 py-0.5 rounded ${visit.sick_members_count > 0 ? 'bg-amber-50 text-amber-700' : 'text-slate-400'}`}>
+                                  {visit.sick_members_count}
+                                </span>
+                              </td>
+                              <td className="py-4 px-6 text-slate-500 max-w-[200px] truncate" title={visit.symptoms}>
+                                {visit.symptoms || 'None'}
+                              </td>
+                              <td className="py-4 px-6">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                  ['Confirmed Case', 'Confirm'].includes(visit.status) ? 'bg-red-50 text-red-700 border border-red-150' :
+                                  visit.status === 'Suspected Case' ? 'bg-amber-50 text-amber-700 border border-amber-150' :
+                                  'bg-emerald-50 text-emerald-700 border border-emerald-150'
+                                }`}>
+                                  {visit.status}
+                                </span>
+                              </td>
+                              <td className="py-4 px-6 text-slate-500">
+                                {visit.visit_date ? new Date(visit.visit_date).toLocaleDateString() : 'N/A'}
+                              </td>
+                            </tr>
+                          ))}
+                          {householdVisits.length === 0 && (
+                            <tr>
+                              <td colSpan="8" className="py-8 text-center text-slate-400">No household visits logged yet.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ALERT INVESTIGATION STATUS TAB */}
+            {activeTab === 'investigation_status' && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* Stats Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total Investigations</p>
+                    <p className="text-3xl font-extrabold text-blue-600 mt-2">{alertInvestigations.length}</p>
+                    <p className="text-[10px] text-slate-400 mt-1">EWS Alert triggers investigated</p>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Active/In Progress</p>
+                    <p className="text-3xl font-extrabold text-amber-600 mt-2">
+                      {alertInvestigations.filter(i => ['Pending', 'Under Investigation'].includes(i.verification_status)).length}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-1">Currently being checked</p>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Verified Outbreaks</p>
+                    <p className="text-3xl font-extrabold text-rose-600 mt-2">
+                      {alertInvestigations.filter(i => i.verification_status === 'Verified').length}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-1">ASHA confirmed outbreaks</p>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Resolved Investigations</p>
+                    <p className="text-3xl font-extrabold text-emerald-600 mt-2">
+                      {alertInvestigations.filter(i => i.verification_status === 'Resolved').length}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-1">Mitigated/Safe zones</p>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2 mb-2">
+                    <ClipboardList className="w-5 h-5 text-emerald-600" />
+                    <span>EWS Alert Investigation Status Tracking</span>
+                  </h2>
+                  <p className="text-slate-500 text-xs mb-6">Track ASHA investigations triggered by automated machine learning warnings or manual health alerts.</p>
+
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold text-[10px] uppercase tracking-wider">
+                            <th className="py-4 px-6">ID</th>
+                            <th className="py-4 px-6">Alert Context</th>
+                            <th className="py-4 px-6">Target Village</th>
+                            <th className="py-4 px-6">ASHA Investigator</th>
+                            <th className="py-4 px-6">Findings / Field Notes</th>
+                            <th className="py-4 px-6">Status</th>
+                            <th className="py-4 px-6">Date Checked</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs">
+                          {alertInvestigations.map(inv => (
+                            <tr key={inv.id} className="hover:bg-slate-50 transition">
+                              <td className="py-4 px-6 font-mono font-bold text-slate-400">#INV-{inv.id}</td>
+                              <td className="py-4 px-6 max-w-[200px] truncate" title={inv.alert_message}>
+                                {inv.alert_message || 'Automatic cluster trigger'}
+                              </td>
+                              <td className="py-4 px-6 font-semibold text-slate-700">{inv.village}</td>
+                              <td className="py-4 px-6 text-slate-800">👩‍⚕️ {inv.asha_worker_name}</td>
+                              <td className="py-4 px-6 italic text-slate-550 max-w-[250px] truncate" title={inv.findings}>
+                                {inv.findings || 'No notes logged.'}
+                              </td>
+                              <td className="py-4 px-6">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                  inv.verification_status === 'Verified' ? 'bg-red-50 text-red-700 border border-red-150' :
+                                  inv.verification_status === 'Resolved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' :
+                                  inv.verification_status === 'Under Investigation' ? 'bg-amber-50 text-amber-700 border border-amber-150' :
+                                  'bg-slate-50 text-slate-700 border border-slate-150'
+                                }`}>
+                                  {inv.verification_status}
+                                </span>
+                              </td>
+                              <td className="py-4 px-6 text-slate-500">
+                                {inv.visit_date ? new Date(inv.visit_date).toLocaleDateString() : 'N/A'}
+                              </td>
+                            </tr>
+                          ))}
+                          {alertInvestigations.length === 0 && (
+                            <tr>
+                              <td colSpan="7" className="py-8 text-center text-slate-400">No alert investigations logged.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* EMERGENCY BROADCAST TABS */}
             {activeTab === 'alerts' && (
               <div className="space-y-8 animate-in fade-in duration-200">
@@ -560,6 +1086,72 @@ export default function OfficialDashboard() {
           </div>
         )}
       </div>
+
+      {/* Report Verification Modal */}
+      {selectedReport && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 w-full max-w-md shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setSelectedReport(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 mb-2">
+              <CheckSquare className="w-5 h-5 text-emerald-600" />
+              <span>Verify Symptom Report #{selectedReport.id}</span>
+            </h3>
+            <p className="text-slate-500 text-xs mb-4">
+              Enter the clinical diagnosis and check if referrals are required for <strong>{selectedReport.villager_name}</strong>.
+            </p>
+
+            <form onSubmit={handleVerifyReport} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Official Diagnosis *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Mild Gastroenteritis, Cholera Suspect"
+                  value={diagnosis}
+                  onChange={e => setDiagnosis(e.target.value)}
+                  className="px-4 py-2 text-xs rounded-xl border border-slate-200 bg-white text-slate-800 font-bold focus:ring-2 focus:ring-emerald-500 outline-none w-full shadow-sm"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center gap-2 py-2">
+                <input
+                  type="checkbox"
+                  id="referral"
+                  checked={referralStatus}
+                  onChange={e => setReferralStatus(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-600 border-slate-350 focus:ring-emerald-500"
+                />
+                <label htmlFor="referral" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                  🚨 Refer patient to Primary Health Center (PHC)
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedReport(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={verifying}
+                  className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition disabled:opacity-50"
+                >
+                  {verifying ? 'Verifying...' : 'Verify Report'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

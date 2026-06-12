@@ -30,18 +30,21 @@ app = create_app()
 with app.app_context():
     try:
         # Clear existing data in correct FK order
-        print("\n[INFO] Clearing existing data...")
-        from app.models.notification import Notification
-        from app.models.water_source import WaterSource
-        from app.models.incident_report import IncidentReport
-        Notification.query.delete()
-        SymptomReport.query.delete()
-        User.query.delete()
-        WaterQuality.query.delete()
-        WaterSource.query.delete()
-        IncidentReport.query.delete()
+        # Recreate database tables to update schemas
+        print("\n[INFO] Dropping and recreating all database tables...")
+        from sqlalchemy import text
+        
+        # Temporarily disable foreign key checks for MySQL to clear tables cleanly
+        db.session.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
         db.session.commit()
-        print("[OK] Cleared existing data")
+        
+        db.drop_all()
+        db.create_all()
+        
+        # Re-enable foreign key checks
+        db.session.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
+        db.session.commit()
+        print("[OK] Recreated schemas successfully")
 
 
         # Create sample users

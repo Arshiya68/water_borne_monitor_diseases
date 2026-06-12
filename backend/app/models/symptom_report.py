@@ -7,6 +7,10 @@ class SymptomReport(db.Model):
     id                   = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id              = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     
+    # Villager Details
+    villager_name        = db.Column(db.String(100), nullable=True)
+    villager_age         = db.Column(db.Integer, nullable=True)
+    
     # Location
     village              = db.Column(db.String(100), nullable=False, index=True)
     district             = db.Column(db.String(100), nullable=False)
@@ -20,6 +24,10 @@ class SymptomReport(db.Model):
     fever                = db.Column(db.Integer, default=0)
     abdominal_pain       = db.Column(db.Integer, default=0)
     dehydration          = db.Column(db.Integer, default=0)
+    nausea               = db.Column(db.Integer, default=0)
+    blood_in_stool       = db.Column(db.Integer, default=0)
+    skin_infection       = db.Column(db.Integer, default=0)
+    other_symptoms       = db.Column(db.Text, nullable=True)
     
     # Severity (1-5 scale)
     diarrhea_severity    = db.Column(db.Integer, default=1)
@@ -35,11 +43,13 @@ class SymptomReport(db.Model):
     risk_confidence      = db.Column(db.Float, default=0.0)
     water_quality_score  = db.Column(db.Float, default=50)
     
-    # Verification
+    # Verification & Assignment
     verified             = db.Column(db.Boolean, default=False, index=True)
     verified_by_id       = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     diagnosis            = db.Column(db.String(100), nullable=True)
     referral_status      = db.Column(db.Boolean, default=False)
+    status               = db.Column(db.String(20), default='Pending', index=True)  # 'Pending', 'Verified', 'Rejected'
+    assigned_asha_worker_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     verified_at          = db.Column(db.DateTime, nullable=True)
     
     # Timestamps
@@ -50,10 +60,15 @@ class SymptomReport(db.Model):
     alert_sent           = db.Column(db.Boolean, default=False)
     alert_sent_at        = db.Column(db.DateTime, nullable=True)
 
+    # Relationships
+    assigned_asha_worker = db.relationship('User', foreign_keys=[assigned_asha_worker_id], backref='assigned_reports')
+
     def to_dict(self):
         return {
             'id': self.id,
             'user_id': self.user_id,
+            'villager_name': self.villager_name,
+            'villager_age': self.villager_age,
             'village': self.village,
             'district': self.district,
             'state': self.state,
@@ -68,12 +83,18 @@ class SymptomReport(db.Model):
             'predicted_risk': self.predicted_risk,
             'risk_confidence': self.risk_confidence,
             'water_quality_score': self.water_quality_score,
+            'status': self.status,
+            'assigned_asha_worker_id': self.assigned_asha_worker_id,
             'symptoms': {
                 'diarrhea': self.diarrhea,
                 'vomiting': self.vomiting,
                 'fever': self.fever,
                 'abdominal_pain': self.abdominal_pain,
                 'dehydration': self.dehydration,
+                'nausea': self.nausea,
+                'blood_in_stool': self.blood_in_stool,
+                'skin_infection': self.skin_infection,
+                'other_symptoms': self.other_symptoms,
             },
             'diarrhea_severity': self.diarrhea_severity,
             'fever_severity': self.fever_severity,

@@ -47,8 +47,10 @@ def create_app():
     from .models.water_source import WaterSource
     from .models.emergency_location import EmergencyLocation
 
-    # New Model
+    # New Models
     from .models.incident_report import IncidentReport
+    from .models.household_visit import HouseholdVisit
+    from .models.alert_investigation import AlertInvestigation
 
     # ==========================
     # Import Blueprints
@@ -70,8 +72,10 @@ def create_app():
 
     from .routes.water_quality import water_quality_bp
 
-    # New Route
+    # New Routes
     from .routes.incidents import incidents_bp
+    from .routes.household_visits import household_visits_bp
+    from .routes.alert_investigations import alert_investigations_bp
 
     # ==========================
     # Register Blueprints
@@ -151,6 +155,17 @@ def create_app():
     app.register_blueprint(
         incidents_bp,
         url_prefix='/api'
+    )
+
+    # HOUSEHOLD VISITS & ALERT INVESTIGATIONS ROUTES
+    app.register_blueprint(
+        household_visits_bp,
+        url_prefix='/api/household-visits'
+    )
+
+    app.register_blueprint(
+        alert_investigations_bp,
+        url_prefix='/api/alert-investigations'
     )
 
     # ==========================

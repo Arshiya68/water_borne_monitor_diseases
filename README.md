@@ -64,8 +64,25 @@ Install all required Python packages:
 pip install -r requirements.txt
 ```
 
+#### B. Database Configuration & MySQL Workbench Setup
+Before seeding the database, make sure you configure your local MySQL instance using MySQL Workbench:
+
+1. **Create the Database and Tables:**
+   - Open **MySQL Workbench** and connect to your local MySQL instance.
+   - Click the **Create a new SQL tab** button.
+   - Copy the SQL DDL commands from the [create_tables.sql](./create_tables.sql) file located in the project root.
+   - Paste the SQL script into the query editor and click **Execute** (lightning bolt icon).
+   - This will create the `waterborne_db` database and all required tables: `users`, `water_quality`, `notifications`, `symptom_reports`, `household_visits` (Village Health Register), `alert_investigations`, `water_sources`, `incident_reports`, and `emergency_locations`.
+
+2. **Configure Backend Environment:**
+   - Open [backend/.env](./backend/.env) file.
+   - Update `DATABASE_URL` with your local MySQL credentials:
+     ```
+     DATABASE_URL=mysql+pymysql://<mysql_user>:<mysql_password>@localhost:3306/waterborne_db
+     ```
+
 #### C. Seed Database
-Create database tables and seed baseline sample data (users, water sources, parameters):
+Once your MySQL tables are created, run the database seeder to insert baseline sample data (users, water sources, environmental parameters):
 ```bash
 python sample_data.py
 ```

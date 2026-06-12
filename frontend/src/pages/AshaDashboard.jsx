@@ -5,21 +5,19 @@ import toast from 'react-hot-toast'
 import {
   Activity,
   Users,
-  CheckCircle,
   AlertCircle,
-  Map,
-  Plus,
-  RefreshCw,
   Phone,
   Calendar,
   FileText,
-  Clock,
   HeartPulse,
-  Droplet,
-  UserCheck,
-  Edit2,
-  Save,
-  Check
+  Plus,
+  Check,
+  X,
+  ShieldAlert,
+  ArrowRight,
+  TrendingUp,
+  MapPin,
+  ClipboardList
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 
@@ -37,23 +35,32 @@ export default function AshaDashboard() {
   const [referralStatus, setReferralStatus] = useState(false)
   const [verifying, setVerifying] = useState(false)
 
-  // Households Mock State
-  const [households, setHouseholds] = useState([
-    { id: 101, owner: 'Ravi Kumar', members: 4, status: 'Symptomatic', lastVisited: '2 days ago', address: 'Ward 1 - Plot 4' },
-    { id: 102, owner: 'Suresh Patel', members: 5, status: 'Healthy', lastVisited: '1 week ago', address: 'Ward 1 - Plot 12' },
-    { id: 103, owner: 'Sita Devi', members: 3, status: 'Not Visited', lastVisited: 'Never', address: 'Ward 2 - Plot 8' },
-    { id: 104, owner: 'Anil Reddy', members: 6, status: 'Healthy', lastVisited: '3 days ago', address: 'Ward 2 - Plot 19' },
-    { id: 105, owner: 'Laxmi K.', members: 2, status: 'Symptomatic', lastVisited: '1 day ago', address: 'Ward 3 - Plot 2' },
-  ])
-
-  // Field Visits Tracker State
-  const [visits, setVisits] = useState([])
-  const [visitHouse, setVisitHouse] = useState('Ravi Kumar')
-  const [visitDate, setVisitDate] = useState(new Date().toISOString().split('T')[0])
-  const [checkSymptoms, setCheckSymptoms] = useState(true)
-  const [checkWater, setCheckWater] = useState(true)
-  const [needReferral, setNeedReferral] = useState(false)
+  // Direct Household Visit Entry State
+  const [householdName, setHouseholdName] = useState('')
+  const [familyMembers, setFamilyMembers] = useState(4)
+  const [address, setAddress] = useState(user?.village || '')
+  const [waterSource, setWaterSource] = useState('Tap Water')
+  const [sickMembersCount, setSickMembersCount] = useState(0)
+  const [observedSymptoms, setObservedSymptoms] = useState({
+    fever: false,
+    diarrhea: false,
+    vomiting: false,
+    nausea: false,
+    stomach_pain: false
+  })
   const [visitNotes, setVisitNotes] = useState('')
+  const [visitDate, setVisitDate] = useState(new Date().toISOString().split('T')[0])
+  const [followUpDate, setFollowUpDate] = useState('')
+  const [visitStatus, setVisitStatus] = useState('Healthy')
+  const [visitsHistory, setVisitsHistory] = useState([])
+  const [savingVisit, setSavingVisit] = useState(false)
+
+  // Alert Investigations State
+  const [selectedAlert, setSelectedAlert] = useState(null)
+  const [findings, setFindings] = useState('')
+  const [investigationStatus, setInvestigationStatus] = useState('Under Investigation')
+  const [investigations, setInvestigations] = useState([])
+  const [savingInvestigation, setSavingInvestigation] = useState(false)
 
   // Emergency Contacts state (ASHA editable for local numbers)
   const [emergencyContacts, setEmergencyContacts] = useState([
@@ -68,7 +75,8 @@ export default function AshaDashboard() {
     fetchStats()
     fetchAlerts()
     fetchReports()
-    loadFieldVisits()
+    fetchVisitsHistory()
+    fetchInvestigations()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -97,56 +105,93 @@ export default function AshaDashboard() {
   const fetchReports = async () => {
     try {
       const response = await api.get('/reports/list')
-      // ASHA only works in their district
-      const filtered = response.data.filter(r => r.district === user?.district)
+      // ASHA worker sees reports in their district
+      const filtered = response.data.filter(
+        r => r.district.toLowerCase() === user?.district?.toLowerCase()
+      )
       setReports(filtered)
     } catch (error) {
       console.error('Failed to load reports:', error)
     }
   }
 
-  const loadFieldVisits = () => {
-    const saved = localStorage.getItem('asha_field_visits')
-    if (saved) {
-      setVisits(JSON.parse(saved))
-    } else {
-      const initial = [
-        { id: 1, house: 'Ravi Kumar', date: '2026-06-10', symptoms: 'Yes', water: 'Yes', referral: 'Yes', notes: 'Patient had diarrhea, advised boiling water.' },
-        { id: 2, house: 'Anil Reddy', date: '2026-06-08', symptoms: 'No', water: 'Yes', referral: 'No', notes: 'Household water storage is clean.' },
-      ]
-      setVisits(initial)
-      localStorage.setItem('asha_field_visits', JSON.stringify(initial))
+  const fetchVisitsHistory = async () => {
+    try {
+      const response = await api.get('/household-visits')
+      setVisitsHistory(response.data)
+    } catch (error) {
+      console.error('Failed to load visits:', error)
     }
   }
 
-  const handleLogVisit = (e) => {
-    e.preventDefault()
-    const newVisit = {
-      id: Date.now(),
-      house: visitHouse,
-      date: visitDate,
-      symptoms: checkSymptoms ? 'Yes' : 'No',
-      water: checkWater ? 'Yes' : 'No',
-      referral: needReferral ? 'Yes' : 'No',
-      notes: visitNotes,
+  const fetchInvestigations = async () => {
+    try {
+      const response = await api.get('/alert-investigations')
+      setInvestigations(response.data)
+    } catch (error) {
+      console.error('Failed to load investigations:', error)
     }
-    const updated = [newVisit, ...visits]
-    setVisits(updated)
-    localStorage.setItem('asha_field_visits', JSON.stringify(updated))
-    setVisitNotes('')
-    toast.success('Field visit logged successfully!')
+  }
 
-    // Update mock household status
-    setHouseholds(prev => prev.map(h => {
-      if (h.owner === visitHouse) {
-        return {
-          ...h,
-          status: needReferral ? 'Symptomatic' : 'Healthy',
-          lastVisited: 'Just now'
-        }
-      }
-      return h
+  const handleToggleSymptom = (name) => {
+    setObservedSymptoms(prev => ({
+      ...prev,
+      [name]: !prev[name]
     }))
+  }
+
+  const handleLogHouseholdVisit = async (e) => {
+    e.preventDefault()
+    if (!householdName.trim()) {
+      toast.error('Household name is required')
+      return
+    }
+
+    setSavingVisit(true)
+    try {
+      const symptomsList = Object.entries(observedSymptoms)
+        .filter(([_, checked]) => checked)
+        .map(([name, _]) => name.replace('_', ' '))
+        .join(', ')
+
+      const payload = {
+        household_name: householdName,
+        village: address,
+        family_members: familyMembers,
+        water_source: waterSource,
+        sick_members_count: sickMembersCount,
+        symptoms: symptomsList || 'None',
+        status: visitStatus,
+        notes: visitNotes,
+        visit_date: visitDate,
+        follow_up_date: followUpDate || null
+      }
+
+      await api.post('/household-visits', payload)
+      toast.success('Field visit logged to Village Health Register!')
+      
+      // Reset form
+      setHouseholdName('')
+      setVisitNotes('')
+      setSickMembersCount(0)
+      setObservedSymptoms({
+        fever: false,
+        diarrhea: false,
+        vomiting: false,
+        nausea: false,
+        stomach_pain: false
+      })
+      setVisitStatus('Healthy')
+      setFollowUpDate('')
+
+      fetchVisitsHistory()
+      fetchStats()
+    } catch (error) {
+      console.error(error)
+      toast.error('Failed to save visit record')
+    } finally {
+      setSavingVisit(false)
+    }
   }
 
   const handleVerifyReport = async (reportId) => {
@@ -161,7 +206,7 @@ export default function AshaDashboard() {
         diagnosis: diagnosis,
         referral_status: referralStatus
       })
-      toast.success('Report verified and diagnosis logged!')
+      toast.success('Report successfully verified on ground!')
       setDiagnosis('')
       setSelectedReport(null)
       fetchReports()
@@ -173,171 +218,223 @@ export default function AshaDashboard() {
     }
   }
 
-  const handleUpdateHouseholdStatus = (id, newStatus) => {
-    setHouseholds(prev => prev.map(h => h.id === id ? { ...h, status: newStatus, lastVisited: 'Just now' } : h))
-    toast.success('Household health status updated!')
+  const handleRejectReport = async (reportId) => {
+    if (window.confirm('Are you sure you want to mark this report as false/rejected?')) {
+      try {
+        await api.patch(`/reports/reject/${reportId}`)
+        toast.success('Report marked as Rejected')
+        setSelectedReport(null)
+        fetchReports()
+        fetchStats()
+      } catch (err) {
+        toast.error('Failed to reject report')
+      }
+    }
   }
 
-  const handleSaveContact = (index) => {
+  const handleEscalateReport = async (reportId) => {
+    if (!diagnosis.trim()) {
+      toast.error('Please provide a clinical diagnosis/reason for escalation')
+      return
+    }
+
+    setVerifying(true)
+    try {
+      await api.patch(`/reports/escalate/${reportId}`, {
+        diagnosis: diagnosis
+      })
+      toast.success('Report escalated to Higher Officials! Alert generated.')
+      setDiagnosis('')
+      setSelectedReport(null)
+      fetchReports()
+      fetchStats()
+      fetchAlerts()
+    } catch (err) {
+      toast.error('Failed to escalate report')
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  const handleInvestigateAlertSubmit = async (e) => {
+    e.preventDefault()
+    if (!findings.trim()) {
+      toast.error('Findings notes are required to verify the area')
+      return
+    }
+
+    setSavingInvestigation(true)
+    try {
+      await api.post('/alert-investigations/investigate', {
+        alert_id: selectedAlert.id,
+        findings: findings,
+        verification_status: investigationStatus,
+        village: selectedAlert.village || user?.village
+      })
+
+      toast.success('Area investigation logged!')
+      setFindings('')
+      setSelectedAlert(null)
+      fetchInvestigations()
+      fetchAlerts()
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to save area investigation')
+    } finally {
+      setSavingInvestigation(false)
+    }
+  }
+
+  const handleUpdateContact = (index) => {
     const updated = [...emergencyContacts]
     updated[index].number = editNumber
     setEmergencyContacts(updated)
     setEditingContact(null)
-    toast.success('Contact number updated!')
+    toast.success('Helpline contact updated!')
   }
 
-  const highRiskReports = reports.filter(r => r.predicted_risk === 'High')
-
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 font-sans">
       <Navbar />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-purple-700 to-indigo-700 rounded-3xl shadow-lg p-8 mb-8 text-white relative overflow-hidden">
+        
+        {/* Top Header Card */}
+        <div className="bg-gradient-to-r from-purple-700 via-indigo-700 to-blue-700 rounded-3xl shadow-xl p-8 mb-8 text-white relative overflow-hidden">
           <div className="relative z-10">
-            <span className="px-3 py-1 bg-white/20 rounded-full text-xs font-bold uppercase tracking-wider">ASHA Field Officer</span>
-            <h1 className="text-4xl font-extrabold mt-3 mb-2 flex items-center gap-2">
+            <span className="px-3.5 py-1 bg-white/20 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-sm">ASHA Field Surveillance Unit</span>
+            <h1 className="text-4.5xl font-black mt-4 mb-2 flex items-center gap-2">
               <span>👩‍⚕️ ASHA Health Dashboard</span>
             </h1>
-            <p className="text-purple-100 text-sm max-w-2xl mt-1">
-              Field surveillance portal for <strong>{user?.village || 'Nalgonda'} village</strong>. Track local surveys, verify symptoms, manage referrals, and check water systems.
+            <p className="text-purple-100 text-sm max-w-2xl mt-1 leading-relaxed">
+              Surveillance portal for <strong>{user?.village || 'Local'} Village</strong>. Review submitted symptom logs, log direct household checkups, and verify EWS outbreak warnings.
             </p>
           </div>
         </div>
 
-        {/* Dashboard Tabs */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-2 mb-8">
-          <nav className="flex flex-wrap gap-1">
-            {[
-              { id: 'overview', label: 'Overview', icon: Activity },
-              { id: 'households', label: 'Assigned Households', icon: Users },
-              { id: 'reports', label: 'Symptom Surveys', icon: FileText },
-              { id: 'high_risk', label: 'High-Risk Referrals', icon: HeartPulse },
-              { id: 'visits', label: 'Field Visit Tracker', icon: Calendar },
-              { id: 'emergencies', label: 'District Contacts', icon: Phone },
-            ].map((tab) => {
-              const Icon = tab.icon
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id)
-                    setSelectedReport(null)
-                  }}
-                  className={`flex items-center gap-2 px-5 py-3.5 rounded-xl font-bold text-xs transition whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? 'bg-purple-600 text-white shadow-md shadow-purple-100'
-                      : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
-                  {tab.id === 'high_risk' && highRiskReports.length > 0 && (
-                    <span className="ml-1 px-2 py-0.5 bg-red-600 text-white rounded-full text-[10px]">
-                      {highRiskReports.length}
-                    </span>
-                  )}
-                  {tab.id === 'reports' && reports.filter(r => !r.verified).length > 0 && (
-                    <span className="ml-1 px-2 py-0.5 bg-yellow-500 text-white rounded-full text-[10px]">
-                      {reports.filter(r => !r.verified).length}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </nav>
+        {/* Navigation Tabs */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-2 mb-8 flex flex-wrap gap-1">
+          {[
+            { id: 'overview', label: 'Overview', icon: Activity },
+            { id: 'assigned_reports', label: 'Assigned Reports', icon: FileText },
+            { id: 'health_register', label: 'Village Health Register', icon: Users },
+            { id: 'alert_verification', label: 'Alert Verification', icon: ShieldAlert },
+            { id: 'visits_history', label: 'Visit History Logs', icon: ClipboardList },
+            { id: 'emergencies', label: 'District Contacts', icon: Phone },
+          ].map((tab) => {
+            const Icon = tab.icon
+            const isPendingReports = tab.id === 'assigned_reports' && reports.filter(r => r.status === 'Pending').length > 0
+            const isPendingAlerts = tab.id === 'alert_verification' && alerts.length > 0
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  setActiveTab(tab.id)
+                  setSelectedReport(null)
+                  setSelectedAlert(null)
+                }}
+                className={`flex items-center gap-2 px-5 py-3.5 rounded-xl font-bold text-xs transition duration-200 ${
+                  activeTab === tab.id
+                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-200'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+                {isPendingReports && (
+                  <span className="px-2 py-0.5 bg-yellow-500 text-white rounded-full text-[10px] font-black">
+                    {reports.filter(r => r.status === 'Pending').length}
+                  </span>
+                )}
+                {isPendingAlerts && (
+                  <span className="px-2 py-0.5 bg-red-600 text-white rounded-full text-[10px] font-black">
+                    {alerts.length}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
 
         {loading ? (
-          <div className="text-center py-16">
-            <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-slate-600">Syncing database and reports...</p>
+          <div className="text-center py-20">
+            <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-slate-600 font-medium">Syncing database and logs from MySQL...</p>
           </div>
         ) : (
           <div className="space-y-8">
+            
             {/* OVERVIEW TAB */}
             {activeTab === 'overview' && (
               <div className="space-y-8">
-                {/* Stats */}
-                <div>
-                  <h2 className="text-lg font-extrabold text-slate-900 mb-4 flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-purple-600" />
-                    <span>Field Surveillance Statistics ({user?.district})</span>
-                  </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                      <p className="text-xs text-slate-500 font-bold uppercase">Total District Surveys</p>
-                      <p className="text-3xl font-extrabold text-purple-600 mt-2">{reports.length}</p>
-                      <p className="text-[10px] text-slate-400 mt-1">Logged by local citizens</p>
-                    </div>
+                {/* Stats cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Total Reports logged</p>
+                    <p className="text-3.5xl font-black text-slate-800 mt-2">{reports.length}</p>
+                    <div className="text-[10px] text-purple-600 font-bold mt-1">Symptom audits in district</div>
+                  </div>
 
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                      <p className="text-xs text-slate-500 font-bold uppercase">Pending Verifications</p>
-                      <p className="text-3xl font-extrabold text-yellow-600 mt-2">{reports.filter(r => !r.verified).length}</p>
-                      <p className="text-[10px] text-slate-400 mt-1">Requires ground visits</p>
-                    </div>
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Pending Review</p>
+                    <p className="text-3.5xl font-black text-yellow-600 mt-2">{reports.filter(r => r.status === 'Pending').length}</p>
+                    <div className="text-[10px] text-slate-500 font-bold mt-1">Requires home verification visits</div>
+                  </div>
 
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                      <p className="text-xs text-slate-500 font-bold uppercase">High Risk Alerts</p>
-                      <p className="text-3xl font-extrabold text-red-600 mt-2">{highRiskReports.length}</p>
-                      <p className="text-[10px] text-slate-400 mt-1">Requires immediate PHC referral</p>
-                    </div>
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Verified Cases</p>
+                    <p className="text-3.5xl font-black text-green-600 mt-2">{reports.filter(r => r.status === 'Verified').length}</p>
+                    <div className="text-[10px] text-slate-500 font-bold mt-1">Confirmed clinical outbreaks</div>
+                  </div>
 
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                      <p className="text-xs text-slate-500 font-bold uppercase">Verification Rate</p>
-                      <p className="text-3xl font-extrabold text-blue-600 mt-2">
-                        {reports.length > 0 ? `${((reports.filter(r => r.verified).length / reports.length) * 100).toFixed(0)}%` : '0%'}
-                      </p>
-                      <p className="text-[10px] text-slate-400 mt-1">Completed verifications</p>
-                    </div>
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Alerts Active</p>
+                    <p className="text-3.5xl font-black text-red-600 mt-2">{alerts.length}</p>
+                    <div className="text-[10px] text-slate-500 font-bold mt-1">Active regional alerts to verify</div>
                   </div>
                 </div>
 
-                {/* Alerts */}
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                  <h2 className="text-lg font-extrabold text-slate-900 mb-4 flex items-center gap-2">
+                {/* EWS Warnings Alert feed */}
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                  <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                     <AlertCircle className="w-5 h-5 text-red-500" />
-                    <span>Active Location Alerts & Warnings</span>
-                  </h2>
+                    <span>Active Outbreak Warning Notifications</span>
+                  </h3>
+
                   {alerts.length === 0 ? (
                     <div className="p-8 border border-dashed rounded-xl text-center text-slate-500 text-sm">
-                      🟢 Clear: No active outbreak alerts or warnings found for your village or district.
+                      🟢 All clear. No active outbreak warnings flagged for this sector.
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
                       {alerts.map((alert) => (
                         <div
                           key={alert.id}
-                          className={`p-5 rounded-2xl border-2 flex items-start space-x-3 shadow-sm ${
-                            alert.risk_level === 'High' ? 'bg-red-50 border-red-200 text-red-950' :
-                            alert.risk_level === 'Medium' ? 'bg-amber-50 border-amber-200 text-amber-950' :
-                            'bg-green-50 border-green-200 text-green-950'
-                          }`}
+                          className="p-5 rounded-2xl border bg-slate-50 border-slate-200 flex flex-col justify-between"
                         >
-                          <AlertCircle className={`w-6 h-6 flex-shrink-0 mt-0.5 ${
-                            alert.risk_level === 'High' ? 'text-red-600' :
-                            alert.risk_level === 'Medium' ? 'text-amber-600' :
-                            'text-green-600'
-                          }`} />
                           <div>
-                            <div className="flex items-center space-x-2">
-                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                                alert.risk_level === 'High' ? 'bg-red-200 text-red-800' :
-                                alert.risk_level === 'Medium' ? 'bg-amber-200 text-amber-800' :
-                                'bg-green-200 text-green-800'
-                              }`}>
-                                {alert.risk_level} Risk
+                            <div className="flex justify-between items-center">
+                              <span className="px-2 py-0.5 bg-red-100 text-red-800 text-[10px] font-extrabold rounded uppercase">
+                                Outbreak Warning
                               </span>
                               <span className="text-[10px] text-slate-400">
                                 {new Date(alert.created_at).toLocaleDateString()}
                               </span>
                             </div>
-                            <h4 className="font-extrabold text-xs mt-2 text-slate-900 capitalize">
-                              Target Area: {alert.village || alert.district}
-                            </h4>
-                            <p className="text-xs mt-1 text-slate-700 leading-relaxed">{alert.message}</p>
+                            <p className="text-xs text-slate-700 mt-3 font-medium leading-relaxed">
+                              {alert.message}
+                            </p>
                           </div>
+                          <button
+                            onClick={() => {
+                              setActiveTab('alert_verification')
+                              setSelectedAlert(alert)
+                            }}
+                            className="mt-4 w-full py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1"
+                          >
+                            Investigate Area <ArrowRight className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -346,383 +443,515 @@ export default function AshaDashboard() {
               </div>
             )}
 
-            {/* ASSIGNED HOUSEHOLDS TAB */}
-            {activeTab === 'households' && (
+            {/* ASSIGNED REPORTS TAB */}
+            {activeTab === 'assigned_reports' && (
+              <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-8">
+                {/* Reports Table */}
+                <div className="bg-white border rounded-2xl shadow-sm p-6 space-y-4">
+                  <div className="border-b pb-4">
+                    <h3 className="text-xl font-extrabold text-slate-900">🩺 Assigned Symptoms Reports</h3>
+                    <p className="text-xs text-slate-500 mt-1">Select and review symptom logs submitted by citizens in your village.</p>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b text-slate-500 font-bold text-xs uppercase">
+                          <th className="px-4 py-3">Report ID</th>
+                          <th className="px-4 py-3">Villager</th>
+                          <th className="px-4 py-3">Village</th>
+                          <th className="px-4 py-3">Risk Level</th>
+                          <th className="px-4 py-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reports.length === 0 ? (
+                          <tr>
+                            <td colSpan="5" className="px-4 py-8 text-center text-slate-400 font-medium">
+                              No reports received yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          reports.map((report) => (
+                            <tr
+                              key={report.id}
+                              onClick={() => {
+                                setSelectedReport(report)
+                                setDiagnosis(report.diagnosis || '')
+                                setReferralStatus(report.referral_status || false)
+                              }}
+                              className={`border-b hover:bg-slate-50 cursor-pointer transition ${
+                                selectedReport?.id === report.id ? 'bg-purple-50/50' : ''
+                              }`}
+                            >
+                              <td className="px-4 py-4 font-bold text-purple-700">R-{report.id}</td>
+                              <td className="px-4 py-4 text-slate-700">
+                                {report.villager_name || 'Anonymous'} ({report.villager_age || 'N/A'} yrs)
+                              </td>
+                              <td className="px-4 py-4 text-slate-600">{report.village}</td>
+                              <td className="px-4 py-4">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                                  report.predicted_risk === 'High' ? 'bg-red-100 text-red-800' :
+                                  report.predicted_risk === 'Medium' ? 'bg-amber-100 text-amber-800' :
+                                  'bg-green-100 text-green-800'
+                                }`}>
+                                  {report.predicted_risk}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 font-bold">
+                                <span className={`px-2 py-0.5 rounded text-xs ${
+                                  report.status === 'Verified' ? 'bg-green-100 text-green-800' :
+                                  report.status === 'Rejected' ? 'bg-slate-100 text-slate-600' :
+                                  'bg-yellow-100 text-yellow-800 animate-pulse'
+                                }`}>
+                                  {report.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Details / Verification Panel */}
+                <div className="space-y-6">
+                  {selectedReport ? (
+                    <div className="bg-white border rounded-2xl shadow-sm p-6 space-y-6">
+                      <div className="border-b pb-4 flex justify-between items-start">
+                        <div>
+                          <h4 className="font-extrabold text-slate-900 text-base">Report Details (R-{selectedReport.id})</h4>
+                          <p className="text-xs text-slate-400 mt-1">Logged: {new Date(selectedReport.submitted_at).toLocaleString()}</p>
+                        </div>
+                        <button
+                          onClick={() => handleRejectReport(selectedReport.id)}
+                          className="px-2 py-1 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 text-[10px] font-bold rounded-lg transition"
+                        >
+                          Mark False Report
+                        </button>
+                      </div>
+
+                      {/* Detail metrics */}
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4 text-xs">
+                          <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                            <span className="text-slate-400 block mb-0.5">Water Source used</span>
+                            <span className="font-bold text-slate-800">{['Tap Water', 'Borewell', 'Tank', 'River'][selectedReport.water_source]}</span>
+                          </div>
+                          <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                            <span className="text-slate-400 block mb-0.5">Sick Members</span>
+                            <span className="font-bold text-slate-800">{selectedReport.household_affected} members</span>
+                          </div>
+                        </div>
+
+                        {/* Symptoms Observed */}
+                        <div>
+                          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Symptoms Checked</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {Object.entries(selectedReport.symptoms).map(([symptom, val]) => (
+                              val === 1 && (
+                                <span key={symptom} className="px-2.5 py-1 bg-purple-50 text-purple-700 font-bold border border-purple-100 rounded-lg text-xs capitalize">
+                                  {symptom.replace('_', ' ')}
+                                </span>
+                              )
+                            ))}
+                            {selectedReport.symptoms.other_symptoms && (
+                              <span className="px-2.5 py-1 bg-slate-100 text-slate-700 font-semibold border border-slate-200 rounded-lg text-xs">
+                                Note: {selectedReport.symptoms.other_symptoms}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Form */}
+                      <form onSubmit={(e) => { e.preventDefault(); handleVerifyReport(selectedReport.id) }} className="border-t pt-4 space-y-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5">Official Clinical Diagnosis *</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Mild Gastroenteritis, Cholera, Dysentery"
+                            value={diagnosis}
+                            onChange={(e) => setDiagnosis(e.target.value)}
+                            className="input-field w-full text-xs font-medium"
+                            required
+                          />
+                        </div>
+
+                        <div className="space-y-3">
+                          <label className="flex items-center space-x-2 bg-slate-50 p-3 rounded-lg border cursor-pointer text-xs font-medium text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={referralStatus}
+                              onChange={(e) => setReferralStatus(e.target.checked)}
+                              className="w-4 h-4 rounded text-purple-600"
+                            />
+                            <span>🚑 Refer patient to local Primary Health Centre (PHC)</span>
+                          </label>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 mt-4">
+                          <button
+                            type="submit"
+                            disabled={verifying}
+                            className="py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs transition disabled:opacity-50"
+                          >
+                            Verify Report
+                          </button>
+                          <button
+                            type="button"
+                            disabled={verifying}
+                            onClick={() => handleEscalateReport(selectedReport.id)}
+                            className="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition disabled:opacity-50"
+                          >
+                            Escalate to Official
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center text-slate-400 text-xs font-medium">
+                      Select a symptom report from the table to complete field verification or escalate findings.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* VILLAGE HEALTH REGISTER TAB */}
+            {activeTab === 'health_register' && (
+              <div className="bg-white border rounded-2xl shadow-sm p-6 space-y-6">
+                <div className="border-b pb-4">
+                  <h3 className="text-xl font-extrabold text-slate-900">🏠 Village Health Register (Direct Field Visit Entry)</h3>
+                  <p className="text-xs text-slate-500 mt-1">ASHA workers can directly submit and register new household visit logs to create a permanent database history.</p>
+                </div>
+
+                <form onSubmit={handleLogHouseholdVisit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Left Column fields */}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Household / Owner Name *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Ramesh Reddy"
+                        value={householdName}
+                        onChange={(e) => setHouseholdName(e.target.value)}
+                        className="input-field w-full text-xs font-medium"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Family Members Count</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={familyMembers}
+                          onChange={(e) => setFamilyMembers(Number(e.target.value))}
+                          className="input-field w-full text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Sick Members Count</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={sickMembersCount}
+                          onChange={(e) => setSickMembersCount(Number(e.target.value))}
+                          className="input-field w-full text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Address / Plot Number *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Ward 2, Plot 14"
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        className="input-field w-full text-xs font-medium"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Water Source Used</label>
+                        <select
+                          value={waterSource}
+                          onChange={(e) => setWaterSource(e.target.value)}
+                          className="input-field w-full text-xs"
+                        >
+                          <option value="Tap Water">Tap Water</option>
+                          <option value="Borewell">Borewell</option>
+                          <option value="Tank">Tank</option>
+                          <option value="River">River</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Household Health Status</label>
+                        <select
+                          value={visitStatus}
+                          onChange={(e) => setVisitStatus(e.target.value)}
+                          className="input-field w-full text-xs font-bold"
+                        >
+                          <option value="Healthy">🟢 Healthy</option>
+                          <option value="Suspected Case">🟡 Suspected Case</option>
+                          <option value="Confirmed Case">🔴 Confirmed Case</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column fields */}
+                  <div className="space-y-4 flex flex-col justify-between">
+                    <div>
+                      <span className="block text-xs font-bold text-slate-700 mb-2">Symptoms Observed in Household</span>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {[
+                          { key: 'fever', label: 'Fever' },
+                          { key: 'diarrhea', label: 'Diarrhea' },
+                          { key: 'vomiting', label: 'Vomiting' },
+                          { key: 'nausea', label: 'Nausea' },
+                          { key: 'stomach_pain', label: 'Stomach Pain' }
+                        ].map((symptom) => (
+                          <label key={symptom.key} className="flex items-center space-x-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={observedSymptoms[symptom.key]}
+                              onChange={() => handleToggleSymptom(symptom.key)}
+                              className="w-4 h-4 rounded text-purple-600"
+                            />
+                            <span>{symptom.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Visit Date</label>
+                        <input
+                          type="date"
+                          value={visitDate}
+                          onChange={(e) => setVisitDate(e.target.value)}
+                          className="input-field w-full text-xs"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Follow-up Date (Optional)</label>
+                        <input
+                          type="date"
+                          value={followUpDate}
+                          onChange={(e) => setFollowUpDate(e.target.value)}
+                          className="input-field w-full text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Visit Findings Notes</label>
+                      <textarea
+                        rows="2.5"
+                        placeholder="Log sanitization tips given or details on patient referral status..."
+                        value={visitNotes}
+                        onChange={(e) => setVisitNotes(e.target.value)}
+                        className="input-field w-full text-xs"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={savingVisit}
+                      className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-extrabold rounded-xl text-xs transition disabled:opacity-50 shadow-md shadow-purple-100"
+                    >
+                      {savingVisit ? 'Saving record...' : '✓ Register Household Health Record'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* VISIT HISTORY LOGS TAB */}
+            {activeTab === 'visits_history' && (
               <div className="bg-white border rounded-2xl shadow-sm p-6 space-y-4">
                 <div className="border-b pb-4">
-                  <h3 className="text-xl font-extrabold text-slate-900">🏠 Assigned Households (Village Care List)</h3>
-                  <p className="text-xs text-slate-500 mt-1">Monitor water security and log screenings for your assigned neighborhood units.</p>
+                  <h3 className="text-xl font-extrabold text-slate-900">📋 Permanent Visit History logs</h3>
+                  <p className="text-xs text-slate-500 mt-1">Audit log of all field checkups and household registrations uploaded to MySQL database.</p>
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-sm">
                     <thead>
                       <tr className="bg-slate-50 border-b text-slate-500 font-bold text-xs uppercase">
+                        <th className="px-4 py-3">Visit Date</th>
                         <th className="px-4 py-3">Household Owner</th>
-                        <th className="px-4 py-3">Members</th>
-                        <th className="px-4 py-3">Address</th>
-                        <th className="px-4 py-3">Last Visited</th>
-                        <th className="px-4 py-3">Health Status</th>
-                        <th className="px-4 py-3 text-right">Actions</th>
+                        <th className="px-4 py-3">Plot Address</th>
+                        <th className="px-4 py-3">Symptoms Observed</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Notes</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {households.map((h) => (
-                        <tr key={h.id} className="border-b hover:bg-slate-50">
-                          <td className="px-4 py-4 font-bold text-slate-900">{h.owner}</td>
-                          <td className="px-4 py-4 text-slate-600">{h.members}</td>
-                          <td className="px-4 py-4 text-slate-600">{h.address}</td>
-                          <td className="px-4 py-4 text-slate-500 text-xs">{h.lastVisited}</td>
-                          <td className="px-4 py-4">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                              h.status === 'Symptomatic' ? 'bg-red-100 text-red-800' :
-                              h.status === 'Healthy' ? 'bg-green-100 text-green-800' :
-                              'bg-slate-100 text-slate-600'
-                            }`}>
-                              {h.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 text-right">
-                            <div className="flex justify-end gap-2">
-                              <button
-                                onClick={() => handleUpdateHouseholdStatus(h.id, 'Healthy')}
-                                className="px-3 py-1 bg-green-50 text-green-700 hover:bg-green-100 text-xs font-semibold rounded-lg border border-green-100 transition"
-                              >
-                                Mark Healthy
-                              </button>
-                              <button
-                                onClick={() => handleUpdateHouseholdStatus(h.id, 'Symptomatic')}
-                                className="px-3 py-1 bg-red-50 text-red-700 hover:bg-red-100 text-xs font-semibold rounded-lg border border-red-100 transition"
-                              >
-                                Flag Symptoms
-                              </button>
-                            </div>
+                      {visitsHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan="6" className="px-4 py-8 text-center text-slate-400 font-medium">
+                            No visits registered yet in this village database.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        visitsHistory.map((visit) => (
+                          <tr key={visit.id} className="border-b hover:bg-slate-50/50">
+                            <td className="px-4 py-4 text-slate-600">{new Date(visit.visit_date).toLocaleDateString()}</td>
+                            <td className="px-4 py-4 font-bold text-slate-900">{visit.household_name}</td>
+                            <td className="px-4 py-4 text-slate-600">{visit.village}</td>
+                            <td className="px-4 py-4">
+                              <div className="flex flex-wrap gap-1">
+                                {visit.symptoms.split(', ').map((sym, idx) => (
+                                  <span key={idx} className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] capitalize border">
+                                    {sym}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 font-bold">
+                              <span className={`px-2 py-0.5 rounded text-xs ${
+                                visit.status === 'Confirmed Case' ? 'bg-red-100 text-red-800' :
+                                visit.status === 'Suspected Case' ? 'bg-amber-100 text-amber-800' :
+                                'bg-green-100 text-green-800'
+                              }`}>
+                                {visit.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 text-xs text-slate-500 max-w-xs truncate">{visit.notes || 'None'}</td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
             )}
 
-            {/* SYMPTOM SURVEYS TAB */}
-            {activeTab === 'reports' && (
-              <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-6">
-                {/* Reports List */}
+            {/* ALERT VERIFICATION TAB */}
+            {activeTab === 'alert_verification' && (
+              <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-8">
+                {/* Outbreak Warnings List */}
                 <div className="bg-white border rounded-2xl shadow-sm p-6 space-y-4">
                   <div className="border-b pb-4">
-                    <h3 className="text-xl font-extrabold text-slate-900">🩺 Submitted Symptom Surveys ({reports.length})</h3>
-                    <p className="text-xs text-slate-500 mt-1">Review health details logged by users in your district.</p>
+                    <h3 className="text-xl font-extrabold text-slate-900">🚨 Received EWS Outbreak Alerts</h3>
+                    <p className="text-xs text-slate-500 mt-1">Select an active outbreak warning to investigate the area and submit local findings.</p>
                   </div>
 
                   <div className="space-y-3">
-                    {reports.map((report) => (
-                      <div
-                        key={report.id}
-                        onClick={() => {
-                          setSelectedReport(report)
-                          setDiagnosis(report.diagnosis || '')
-                          setReferralStatus(report.referral_status || false)
-                        }}
-                        className={`p-4 rounded-xl border-2 transition cursor-pointer flex flex-col justify-between hover:shadow-md ${
-                          selectedReport?.id === report.id ? 'border-purple-600 bg-purple-50' : 'border-slate-100 hover:border-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <p className="font-bold text-slate-900">Village: {report.village}</p>
-                            <p className="text-xs text-slate-500 mt-0.5">Submitted: {new Date(report.submitted_at).toLocaleDateString()}</p>
-                          </div>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                            report.predicted_risk === 'High' ? 'bg-red-100 text-red-800' :
-                            report.predicted_risk === 'Medium' ? 'bg-amber-100 text-amber-800' :
-                            'bg-green-100 text-green-800'
-                          }`}>
-                            {report.predicted_risk} Risk
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-slate-500 mt-4 border-t pt-2">
-                          <span>Source: {['Tap Water', 'Borewell', 'Tank', 'River'][report.water_source]}</span>
-                          <span className={`font-bold ${report.verified ? 'text-green-600' : 'text-yellow-600'}`}>
-                            {report.verified ? '✓ Verified' : '⏱ Pending Review'}
-                          </span>
-                        </div>
+                    {alerts.length === 0 ? (
+                      <div className="p-8 border border-dashed rounded-xl text-center text-slate-400 font-medium">
+                        No alerts pending investigation.
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Report Detail Panel & Verification Form */}
-                <div className="space-y-6">
-                  {selectedReport ? (
-                    <div className="bg-white border rounded-2xl shadow-sm p-6 space-y-6 animate-in fade-in zoom-in-95 duration-200">
-                      <div className="border-b pb-4 flex justify-between items-start">
-                        <div>
-                          <h3 className="text-lg font-bold text-slate-900">Survey Details (ID #{selectedReport.id})</h3>
-                          <p className="text-xs text-slate-500">Submitted by Villager from {selectedReport.village}</p>
-                        </div>
-                        <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold ${
-                          selectedReport.verified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {selectedReport.verified ? 'Verified Case' : 'Pending Verification'}
-                        </span>
-                      </div>
-
-                      {/* Symptoms & Parameters */}
-                      <div className="space-y-3">
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Symptoms Flagged:</p>
-                        <div className="flex flex-wrap gap-2 text-xs">
-                          {Object.entries(selectedReport.symptoms).map(([symptom, val]) => (
-                            val === 1 && (
-                              <span key={symptom} className="px-2.5 py-1 bg-purple-100 text-purple-700 font-bold rounded-lg capitalize border border-purple-200">
-                                {symptom.replace('_', ' ')}
-                              </span>
-                            )
-                          ))}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs text-slate-600 mt-3">
-                          <div>
-                            <span className="text-slate-400 block mb-0.5">Affected Members</span>
-                            <span className="font-bold text-slate-800 text-sm">{selectedReport.household_affected} members</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 block mb-0.5">Water Source used</span>
-                            <span className="font-bold text-slate-800 text-sm">{['Tap Water', 'Borewell', 'Tank', 'River'][selectedReport.water_source]}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 block mb-0.5">Water Score (pH/Turbidity)</span>
-                            <span className="font-bold text-slate-800 text-sm">{selectedReport.water_quality_score}/100</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 block mb-0.5">Risk Confidence</span>
-                            <span className="font-bold text-slate-800 text-sm">{((selectedReport.risk_confidence || 0) * 100).toFixed(0)}%</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Verification Form */}
-                      <form onSubmit={(e) => { e.preventDefault(); handleVerifyReport(selectedReport.id) }} className="border-t pt-4 space-y-4">
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">ASHA Worker Ground Verification:</p>
-                        
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700 mb-1.5">Official Clinical Diagnosis *</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Mild Gastroenteritis, Acute Diarrhea, Dehydration"
-                            value={diagnosis}
-                            onChange={(e) => setDiagnosis(e.target.value)}
-                            className="input-field w-full text-xs"
-                            required
-                          />
-                        </div>
-
-                        <label className="flex items-center space-x-2 bg-slate-50 p-3 rounded-lg border border-slate-150 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={referralStatus}
-                            onChange={(e) => setReferralStatus(e.target.checked)}
-                            className="w-4 h-4 rounded text-purple-600"
-                          />
-                          <span className="text-xs text-slate-700 font-semibold">🚑 Refer patient to Primary Health Centre (PHC)</span>
-                        </label>
-
-                        <button
-                          type="submit"
-                          disabled={verifying}
-                          className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs transition disabled:opacity-50"
-                        >
-                          {verifying ? 'Submitting...' : 'Submit Official Diagnosis & Verify'}
-                        </button>
-                      </form>
-                    </div>
-                  ) : (
-                    <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center text-slate-500 text-sm">
-                      🔍 Select a symptom survey from the list to view full health parameters and submit verification records.
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* HIGH-RISK REFERRALS TAB */}
-            {activeTab === 'high_risk' && (
-              <div className="bg-white border rounded-2xl shadow-sm p-6 space-y-4">
-                <div className="border-b pb-4 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-extrabold text-slate-900">🚨 High-Risk Outbreak Cases (Immediate Referrals)</h3>
-                    <p className="text-xs text-slate-500 mt-1">Review individuals whose symptom-water metrics indicate potential local epidemics.</p>
-                  </div>
-                  <span className="px-3 py-1 bg-red-100 text-red-800 text-xs font-bold rounded-full">
-                    {highRiskReports.length} Cases Pending
-                  </span>
-                </div>
-
-                {highRiskReports.length === 0 ? (
-                  <div className="p-12 border border-dashed rounded-xl text-center text-slate-500 text-sm">
-                    🟢 No high-risk outbreak cases logged in your village database currently. All clear.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {highRiskReports.map((report) => (
-                      <div key={report.id} className="border-2 border-red-200 bg-red-50/40 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
-                        <div>
-                          <div className="flex justify-between items-start gap-2 mb-3">
-                            <span className="px-2.5 py-0.5 bg-red-600 text-white rounded-md text-[10px] font-black uppercase">
-                              High Risk Alert
-                            </span>
-                            <span className="text-xs text-slate-500">
-                              {new Date(report.submitted_at).toLocaleDateString()}
-                            </span>
-                          </div>
-                          
-                          <p className="text-sm font-bold text-slate-900">{report.village} Village Case</p>
-                          <div className="mt-3 flex flex-wrap gap-1 text-[10px]">
-                            {Object.entries(report.symptoms).map(([symptom, val]) => (
-                              val === 1 && (
-                                <span key={symptom} className="px-2 py-0.5 bg-red-100 text-red-800 rounded capitalize">
-                                  {symptom}
-                                </span>
-                              )
-                            ))}
-                          </div>
-                          
-                          <p className="text-xs text-slate-600 mt-3">
-                            Water Source: {['Tap Water', 'Borewell', 'Tank', 'River'][report.water_source]} | Affected: {report.household_affected} people
-                          </p>
-                        </div>
-
-                        <div className="mt-5 pt-3 border-t border-slate-200/50 flex gap-2">
-                          <button
+                    ) : (
+                      alerts.map((alert) => {
+                        const inv = investigations.find(i => i.alert_id === alert.id)
+                        return (
+                          <div
+                            key={alert.id}
                             onClick={() => {
-                              setActiveTab('reports')
-                              setSelectedReport(report)
-                              setDiagnosis('Gastroenteritis (PHC Referral)')
-                              setReferralStatus(true)
+                              setSelectedAlert(alert)
+                              setFindings(inv?.findings || '')
+                              setInvestigationStatus(inv?.verification_status || 'Under Investigation')
                             }}
-                            className="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition flex items-center justify-center gap-1"
+                            className={`p-4 rounded-xl border-2 transition cursor-pointer flex flex-col justify-between hover:shadow-sm ${
+                              selectedAlert?.id === alert.id ? 'border-purple-600 bg-purple-50/45' : 'border-slate-100'
+                            }`}
                           >
-                            🚑 Refer to PHC Clinic
-                          </button>
-                        </div>
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="font-bold text-slate-900">Area: {alert.village || alert.district}</p>
+                                <p className="text-xs text-slate-400 mt-1">Warning: {alert.message}</p>
+                              </div>
+                              <span className="px-2 py-0.5 bg-red-100 text-red-800 text-[10px] font-black rounded uppercase">
+                                {alert.risk_level} Risk
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between mt-4 border-t pt-2 text-xs">
+                              <span className="text-slate-400">Time: {new Date(alert.created_at).toLocaleString()}</span>
+                              <span className={`font-black uppercase text-[10px] ${
+                                inv?.verification_status === 'Verified' ? 'text-green-600' :
+                                inv?.verification_status === 'Rejected' ? 'text-slate-500' :
+                                'text-red-500 animate-pulse'
+                              }`}>
+                                {inv ? `● ${inv.verification_status}` : '● Pending Investigation'}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Investigation Panel Form */}
+                <div className="space-y-6">
+                  {selectedAlert ? (
+                    <form onSubmit={handleInvestigateAlertSubmit} className="bg-white border rounded-2xl shadow-sm p-6 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="border-b pb-4">
+                        <h4 className="font-extrabold text-slate-900 text-base">Conduct Area Survey (Alert #{selectedAlert.id})</h4>
+                        <p className="text-xs text-slate-400 mt-1">Submit findings to confirm or resolve the outbreak alert.</p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
 
-            {/* FIELD VISIT TRACKER TAB */}
-            {activeTab === 'visits' && (
-              <div className="grid grid-cols-1 lg:grid-cols-[0.8fr_1.2fr] gap-6">
-                {/* Form */}
-                <form onSubmit={handleLogVisit} className="bg-white border rounded-2xl shadow-sm p-6 space-y-4">
-                  <h3 className="text-lg font-bold text-slate-900 border-b pb-3">📝 Log Home Visit</h3>
-                  
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Household / Owner Name</label>
-                    <select
-                      value={visitHouse}
-                      onChange={(e) => setVisitHouse(e.target.value)}
-                      className="input-field w-full text-xs"
-                    >
-                      {households.map(h => (
-                        <option key={h.id} value={h.owner}>{h.owner} ({h.address})</option>
-                      ))}
-                    </select>
-                  </div>
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs text-slate-600 space-y-2">
+                        <p><strong>Alert message:</strong> {selectedAlert.message}</p>
+                        <p><strong>Target Village:</strong> {selectedAlert.village || 'District Level'}</p>
+                      </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Visit Date</label>
-                    <input
-                      type="date"
-                      value={visitDate}
-                      onChange={(e) => setVisitDate(e.target.value)}
-                      className="input-field w-full text-xs"
-                      required
-                    />
-                  </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Ground Investigation Findings *</label>
+                        <textarea
+                          rows="4"
+                          placeholder="Log results of water sample checks, household interviews, or active diarrhoea cases observed..."
+                          value={findings}
+                          onChange={(e) => setFindings(e.target.value)}
+                          className="input-field w-full text-xs"
+                          required
+                        />
+                      </div>
 
-                  <div className="space-y-2 pt-2">
-                    <label className="flex items-center space-x-2 text-xs text-slate-700 font-semibold cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={checkSymptoms}
-                        onChange={(e) => setCheckSymptoms(e.target.checked)}
-                        className="w-4 h-4 rounded text-purple-600"
-                      />
-                      <span>Symptoms Checked?</span>
-                    </label>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Select Investigation Status</label>
+                        <select
+                          value={investigationStatus}
+                          onChange={(e) => setInvestigationStatus(e.target.value)}
+                          className="input-field w-full text-xs font-bold"
+                        >
+                          <option value="Under Investigation">🟡 Under Investigation</option>
+                          <option value="Verified">🔴 Confirm Outbreak (Verify Alert)</option>
+                          <option value="Rejected">🟢 Reject Alert (False alarm)</option>
+                          <option value="Resolved">🟢 Resolved (Outbreak closed)</option>
+                        </select>
+                      </div>
 
-                    <label className="flex items-center space-x-2 text-xs text-slate-700 font-semibold cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={checkWater}
-                        onChange={(e) => setCheckWater(e.target.checked)}
-                        className="w-4 h-4 rounded text-purple-600"
-                      />
-                      <span>Water Sanitation Inspected?</span>
-                    </label>
-
-                    <label className="flex items-center space-x-2 text-xs text-slate-700 font-semibold cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={needReferral}
-                        onChange={(e) => setNeedReferral(e.target.checked)}
-                        className="w-4 h-4 rounded text-purple-600"
-                      />
-                      <span>Referral to PHC Needed?</span>
-                    </label>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Field Visit Notes</label>
-                    <textarea
-                      placeholder="Enter details on patient conditions, sanitation tips given, etc."
-                      value={visitNotes}
-                      onChange={(e) => setVisitNotes(e.target.value)}
-                      rows="3"
-                      className="input-field w-full text-xs"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs transition"
-                  >
-                    Save Field Visit Record
-                  </button>
-                </form>
-
-                {/* Visit Logs */}
-                <div className="bg-white border rounded-2xl shadow-sm p-6 space-y-4">
-                  <h3 className="text-lg font-bold text-slate-900 border-b pb-3">📋 Visited logs ({visits.length})</h3>
-                  {visits.length === 0 ? (
-                    <p className="text-slate-500 text-sm text-center py-6">No home visits logged yet.</p>
+                      <button
+                        type="submit"
+                        disabled={savingInvestigation}
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl text-xs transition disabled:opacity-50"
+                      >
+                        {savingInvestigation ? 'Saving investigation...' : '✓ Submit Investigation Audit'}
+                      </button>
+                    </form>
                   ) : (
-                    <div className="space-y-3 max-h-[450px] overflow-y-auto pr-2">
-                      {visits.map((visit) => (
-                        <div key={visit.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="font-bold text-slate-900 text-sm">{visit.house}</span>
-                            <span className="text-slate-400">{visit.date}</span>
-                          </div>
-                          <p className="text-slate-700 font-medium">{visit.notes}</p>
-                          <div className="mt-3 flex gap-2 text-[10px] text-slate-500">
-                            <span>Symptom Checked: <strong>{visit.symptoms}</strong></span>
-                            <span>Water Inspected: <strong>{visit.water}</strong></span>
-                            <span>PHC Referral: <strong className={visit.referral === 'Yes' ? 'text-red-600' : ''}>{visit.referral}</strong></span>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center text-slate-400 text-xs font-medium">
+                      Select an active outbreak warning to start conducting area surveys and logging findings.
                     </div>
                   )}
                 </div>
               </div>
             )}
 
-            {/* DISTRICT HELPLINE MANAGEMENT */}
+            {/* HELPLINE TAB */}
             {activeTab === 'emergencies' && (
               <div className="bg-white border rounded-2xl shadow-sm p-6 space-y-6">
                 <div className="border-b pb-4">
@@ -747,14 +976,14 @@ export default function AshaDashboard() {
                             />
                             <div className="flex gap-1">
                               <button
-                                onClick={() => handleSaveContact(idx)}
-                                className="px-2 py-1 bg-green-600 text-white rounded text-[10px] font-bold"
+                                onClick={() => handleUpdateContact(idx)}
+                                className="px-2.5 py-1 bg-green-600 text-white rounded text-[10px] font-bold"
                               >
                                 Save
                               </button>
                               <button
                                 onClick={() => setEditingContact(null)}
-                                className="px-2 py-1 bg-slate-200 text-slate-700 rounded text-[10px]"
+                                className="px-2.5 py-1 bg-slate-200 text-slate-700 rounded text-[10px]"
                               >
                                 Cancel
                               </button>
@@ -776,9 +1005,9 @@ export default function AshaDashboard() {
                             setEditingContact(idx)
                             setEditNumber(contact.number)
                           }}
-                          className="mt-4 text-xs font-bold text-purple-600 hover:underline flex items-center gap-1"
+                          className="mt-4 text-xs font-bold text-purple-600 hover:underline flex items-center gap-1 border-none bg-transparent cursor-pointer"
                         >
-                          <Edit2 className="w-3 h-3" /> Edit Number
+                          ✏️ Edit Number
                         </button>
                       )}
                     </div>
@@ -786,6 +1015,7 @@ export default function AshaDashboard() {
                 </div>
               </div>
             )}
+
           </div>
         )}
       </div>
